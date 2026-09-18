@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Household Budget - 家計簿アプリ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        emerald: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-full text-slate-800 flex flex-col min-h-screen">
+    <!-- Top Header Navigation -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo -->
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-200">
+                        <i class="fa-solid font-bold fa-wallet text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg leading-tight text-slate-900">スマート家計簿</h1>
+                        <p class="text-xs text-slate-500">簡単・快適な資産・支出管理</p>
+                    </div>
+                </div>
+
+                <!-- Month Selector & Actions -->
+                <div class="flex items-center space-x-2 sm:space-x-4">
+                    <!-- Month Selector -->
+                    <div class="flex items-center bg-slate-100 rounded-xl p-1 text-sm">
+                        <button id="prevMonthBtn" class="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-600 hover:text-slate-900">
+                            <i class="fa-solid fa-chevron-left text-xs"></i>
+                        </button>
+                        <span id="currentMonthLabel" class="font-bold px-3 text-slate-700 min-w-[90px] text-center">2026年 9月</span>
+                        <button id="nextMonthBtn" class="p-1.5 hover:bg-white rounded-lg transition-colors text-slate-600 hover:text-slate-900">
+                            <i class="fa-solid fa-chevron-right text-xs"></i>
+                        </button>
+                    </div>
+
+                    <!-- GitHub / Firebase Help Modal Trigger -->
+                    <button onclick="openModal('deployGuideModal')" class="hidden sm:flex items-center space-x-1.5 px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 transition">
+                        <i class="fa-brands fa-github text-sm"></i>
+                        <span>GitHub/Firebase設定</span>
+                    </button>
+
+                    <!-- Add Transaction Button (Primary action) -->
+                    <button onclick="openAddModal()" class="flex items-center space-x-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm hover:shadow transition transform active:scale-95">
+                        <i class="fa-solid fa-plus text-xs"></i>
+                        <span class="hidden sm:inline">明細追加</span>
+                        <span class="sm:hidden">追加</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Financial Overview Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+            <!-- Total Income Card -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">今月の収入</p>
+                        <h3 id="totalIncome" class="text-2xl sm:text-3xl font-bold text-slate-900 mt-2">¥0</h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-down text-lg"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-xs text-slate-500">
+                    <span class="text-emerald-600 font-semibold flex items-center mr-1">
+                        <i class="fa-solid fa-circle text-[8px] mr-1"></i>固定＋変動収入
+                    </span>
+                </div>
+            </div>
+
+            <!-- Total Expense Card -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">今月の支出</p>
+                        <h3 id="totalExpense" class="text-2xl sm:text-3xl font-bold text-slate-900 mt-2">¥0</h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-up text-lg"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center justify-between text-xs text-slate-500">
+                    <span>月予算消化率</span>
+                    <span id="budgetUsagePercent" class="font-semibold text-slate-700">0%</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                    <div id="budgetProgressBar" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Total Balance Card -->
+            <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-sm relative overflow-hidden">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">今月の収支差額</p>
+                        <h3 id="totalBalance" class="text-2xl sm:text-3xl font-bold text-white mt-2">¥0</h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-white/10 text-emerald-400 flex items-center justify-center backdrop-blur-sm">
+                        <i class="fa-solid fa-scale-balanced text-lg"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-xs text-slate-300">
+                    <span>貯蓄率: </span>
+                    <span id="savingsRate" class="ml-1 font-semibold text-emerald-400">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts & Category Distribution Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Category Expense Donut Chart -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-bold text-slate-800 text-base flex items-center">
+                        <i class="fa-solid fa-chart-pie text-emerald-600 mr-2"></i>支出カテゴリー内訳
+                    </h2>
+                </div>
+                <div class="relative flex-1 min-h-[220px] flex items-center justify-center">
+                    <canvas id="categoryChart"></canvas>
+                    <div id="noChartData" class="hidden absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-sm">
+                        <i class="fa-solid fa-folder-open text-3xl mb-2 text-slate-300"></i>
+                        今月の支出データがありません
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category Budget Progress -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col lg:col-span-2">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-bold text-slate-800 text-base flex items-center">
+                        <i class="fa-solid fa-list-check text-emerald-600 mr-2"></i>主要カテゴリー予算進捗
+                    </h2>
+                    <button onclick="openModal('budgetConfigModal')" class="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center">
+                        <i class="fa-solid fa-gear mr-1"></i>予算設定
+                    </button>
+                </div>
+                <div id="categoryBudgetList" class="space-y-3 flex-1 overflow-y-auto custom-scrollbar max-h-[240px] pr-1">
+                    <!-- Dynamic rendering -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Transaction List Section -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <!-- Table Header / Controls -->
+            <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex items-center space-x-2">
+                    <h2 class="font-bold text-slate-800 text-lg">収支明細一覧</h2>
+                    <span id="transactionCountBadge" class="bg-slate-100 text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-semibold">0件</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Search Input -->
+                    <div class="relative flex-1 sm:w-48">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" id="searchInput" placeholder="検索 (メモ/金額)..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+                    </div>
+                    <!-- Type Filter -->
+                    <select id="typeFilter" class="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+                        <option value="all">すべて</option>
+                        <option value="expense">支出のみ</option>
+                        <option value="income">収入のみ</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Table content -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50/70 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                            <th class="py-3 px-4 font-semibold">日付</th>
+                            <th class="py-3 px-4 font-semibold">区分</th>
+                            <th class="py-3 px-4 font-semibold">カテゴリー</th>
+                            <th class="py-3 px-4 font-semibold">メモ / 決済手段</th>
+                            <th class="py-3 px-4 font-semibold text-right">金額</th>
+                            <th class="py-3 px-4 font-semibold text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionTableBody" class="divide-y divide-slate-100 text-sm text-slate-700">
+                        <!-- Dynamic content -->
+                    </tbody>
+                </table>
+                <div id="emptyState" class="hidden py-12 text-center text-slate-400">
+                    <i class="fa-solid fa-receipt text-4xl mb-3 text-slate-300"></i>
+                    <p class="text-sm">該当する明細データが見つかりません</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODAL: Add / Edit Transaction -->
+    <div id="transactionModal" class="fixed inset-0 z-50 hidden bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-xl overflow-hidden transform transition-all">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 id="modalTitle" class="font-bold text-slate-800 text-lg">収支明細の追加</h3>
+                <button onclick="closeModal('transactionModal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="transactionForm" class="p-6 space-y-4">
+                <input type="hidden" id="editIndex" value="-1">
+
+                <!-- Type Selector Tab -->
+                <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
+                    <button type="button" id="typeExpenseBtn" onclick="setFormType('expense')" class="py-2 rounded-lg bg-white text-rose-600 shadow-sm text-center">
+                        <i class="fa-solid fa-minus mr-1"></i>支出
+                    </button>
+                    <button type="button" id="typeIncomeBtn" onclick="setFormType('income')" class="py-2 rounded-lg text-slate-600 text-center hover:text-slate-900">
+                        <i class="fa-solid fa-plus mr-1"></i>収入
+                    </button>
+                </div>
+                <input type="hidden" id="formType" value="expense">
+
+                <!-- Amount & Date Row -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">金額 (円) <span class="text-rose-500">*</span></label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">¥</span>
+                            <input type="number" id="formAmount" min="1" required placeholder="0" class="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 font-bold">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">日付 <span class="text-rose-500">*</span></label>
+                        <input type="date" id="formDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 text-xs">
+                    </div>
+                </div>
+
+                <!-- Category -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">カテゴリー</label>
+                    <select id="formCategory" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800 text-sm">
+                        <!-- Populated dynamically based on type -->
+                    </select>
+                </div>
+
+                <!-- Payment Method / Memo -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">決済方法/口座</label>
+                        <select id="formPayment" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800 text-xs">
+                            <option value="現金">現金</option>
+                            <option value="クレジットカード">クレジットカード</option>
+                            <option value="電子マネー/Pay">電子マネー/Pay</option>
+                            <option value="銀行口座引き落とし">銀行口座引き落とし</option>
+                            <option value="その他">その他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">メモ (場所/店舗名など)</label>
+                        <input type="text" id="formMemo" placeholder="スーパー〇〇, 給与など" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800 text-xs">
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="pt-4 flex items-center justify-end space-x-3 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('transactionModal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition">
+                        保存する
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: GitHub Pages & Firebase Guide -->
+    <div id="deployGuideModal" class="fixed inset-0 z-50 hidden bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-xl overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-brands fa-github text-slate-800 text-xl"></i>
+                    <h3 class="font-bold text-slate-800 text-base">GitHub Pages 公開 & Firebase 設定ガイド</h3>
+                </div>
+                <button onclick="closeModal('deployGuideModal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-6 text-xs text-slate-600 leading-relaxed custom-scrollbar">
+                
+                <!-- Step 1 -->
+                <div class="space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs">1</span>
+                        <h4 class="font-bold text-sm text-slate-800">GitHub Pages で無料公開する手順</h4>
+                    </div>
+                    <ol class="list-decimal list-inside pl-7 space-y-1 text-slate-600">
+                        <li>GitHubで新しいリポジトリ（例: <code class="bg-slate-100 px-1 py-0.5 rounded text-slate-800 font-mono">my-kakeibo</code>）を作成します。</li>
+                        <li>このHTMLファイルを <code class="bg-slate-100 px-1 py-0.5 rounded text-slate-800 font-mono">index.html</code> という名前で保存して、リポジトリにコミット・プッシュします。</li>
+                        <li>リポジトリの <b>Settings &gt; Pages</b> を開きます。</li>
+                        <li><b>Branch</b> を <code class="bg-slate-100 px-1 py-0.5 rounded text-slate-800 font-mono">main</code> (または master) の <code class="bg-slate-100 px-1 py-0.5 rounded text-slate-800 font-mono">/ (root)</code> に設定し、<b>Save</b> をクリックします。</li>
+                        <li>数分で <code class="bg-slate-100 px-1 py-0.5 rounded font-mono text-emerald-700">https://&lt;your-username&gt;.github.io/my-kakeibo/</code> で家計簿アプリが世界公開されます！</li>
+                    </ol>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- Step 2 -->
+                <div class="space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs">2</span>
+                        <h4 class="font-bold text-sm text-slate-800">ご提示の Firebase 設定 (Project ID: task-750c4)</h4>
+                    </div>
+                    <p>このアプリはローカルストレージ（ブラウザ内保存）で即座に動作しますが、Firebase Cloud Firestoreと連携してマルチデバイス同期することも可能です。</p>
+                    <div class="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] overflow-x-auto relative">
+                        <button onclick="copyFirebaseConfig()" class="absolute right-2 top-2 px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[10px] transition">
+                            コピー
+                        </button>
+                        <pre id="firebaseCodeSnippet">const firebaseConfig = {
+  apiKey: "AIzaSyDLmZ2HaepCjwsrjyRT2XnX0L_LD3OR-X0",
+  authDomain: "task-750c4.firebaseapp.com",
+  projectId: "task-750c4",
+  storageBucket: "task-750c4.firebasestorage.app",
+  messagingSenderId: "78443563761",
+  appId: "1:78443563761:web:5e10fc028e4ebf785af750"
+};</pre>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button onclick="closeModal('deployGuideModal')" class="px-4 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition">
+                    閉じる
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Budget Config -->
+    <div id="budgetConfigModal" class="fixed inset-0 z-50 hidden bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-xl overflow-hidden transform transition-all">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 class="font-bold text-slate-800 text-base">月間カテゴリー予算の設定</h3>
+                <button onclick="closeModal('budgetConfigModal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="budgetForm" class="p-6 space-y-3">
+                <div id="budgetInputsContainer" class="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                    <!-- Dynamic inputs -->
+                </div>
+                <div class="pt-4 flex items-center justify-end space-x-3 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('budgetConfigModal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition">
+                        保存する
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Application Logic Script -->
+    <script>
+        // Default Master Categories
+        const EXPENSE_CATEGORIES = [
+            { id: '食費', icon: 'fa-utensils', color: '#10b981', defaultBudget: 40000 },
+            { id: '日用品', icon: 'fa-shopping-basket', color: '#3b82f6', defaultBudget: 15000 },
+            { id: '住居費', icon: 'fa-house', color: '#8b5cf6', defaultBudget: 80000 },
+            { id: '水道光熱費', icon: 'fa-bolt', color: '#f59e0b', defaultBudget: 20000 },
+            { id: '交通・車両', icon: 'fa-bus', color: '#06b6d4', defaultBudget: 10000 },
+            { id: '趣味・娯楽', icon: 'fa-gamepad', color: '#ec4899', defaultBudget: 20000 },
+            { id: '医療・保険', icon: 'fa-user-doctor', color: '#ef4444', defaultBudget: 10000 },
+            { id: '交際費', icon: 'fa-mug-hot', color: '#14b8a6', defaultBudget: 15000 },
+            { id: 'その他支出', icon: 'fa-ellipsis', color: '#64748b', defaultBudget: 10000 }
+        ];
+
+        const INCOME_CATEGORIES = [
+            { id: '給与', icon: 'fa-money-bill-wave', color: '#10b981' },
+            { id: '賞与', icon: 'fa-gift', color: '#059669' },
+            { id: '副業', icon: 'fa-laptop-code', color: '#0d9488' },
+            { id: '臨時収入', icon: 'fa-coins', color: '#3b82f6' },
+            { id: 'その他収入', icon: 'fa-wallet', color: '#64748b' }
+        ];
+
+        // Initial Data Structure
+        let state = {
+            currentYear: new Date().getFullYear(),
+            currentMonth: new Date().getMonth() + 1, // 1-12
+            transactions: [],
+            budgets: {}
+        };
+
+        let categoryChartInstance = null;
+
+        // Load data from LocalStorage
+        function loadState() {
+            const savedTrans = localStorage.getItem('smart_kakeibo_transactions');
+            if (savedTrans) {
+                try { state.transactions = JSON.parse(savedTrans); } catch(e) { state.transactions = []; }
+            } else {
+                // Seed sample data for demonstration
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                state.transactions = [
+                    { id: '1', type: 'income', amount: 320000, category: '給与', date: `${yyyy}-${mm}-25`, payment: '銀行口座引き落とし', memo: '手取り給与' },
+                    { id: '2', type: 'expense', amount: 85000, category: '住居費', date: `${yyyy}-${mm}-27`, payment: '銀行口座引き落とし', memo: '家賃' },
+                    { id: '3', type: 'expense', amount: 6400, category: '食費', date: `${yyyy}-${mm}-02`, payment: 'クレジットカード', memo: 'スーパーで食材購入' },
+                    { id: '4', type: 'expense', amount: 1200, category: '趣味・娯楽', date: `${yyyy}-${mm}-03`, payment: '電子マネー/Pay', memo: 'カフェ代' },
+                    { id: '5', type: 'expense', amount: 3500, category: '日用品', date: `${yyyy}-${mm}-04`, payment: 'クレジットカード', memo: '洗剤・日用品' }
+                ];
+                saveTransactions();
+            }
+
+            const savedBudgets = localStorage.getItem('smart_kakeibo_budgets');
+            if (savedBudgets) {
+                try { state.budgets = JSON.parse(savedBudgets); } catch(e) { state.budgets = {}; }
+            } else {
+                EXPENSE_CATEGORIES.forEach(c => state.budgets[c.id] = c.defaultBudget);
+                saveBudgets();
+            }
+        }
+
+        function saveTransactions() {
+            localStorage.setItem('smart_kakeibo_transactions', JSON.stringify(state.transactions));
+        }
+
+        function saveBudgets() {
+            localStorage.setItem('smart_kakeibo_budgets', JSON.stringify(state.budgets));
+        }
+
+        // Initialize App
+        window.onload = function() {
+            loadState();
+            setupEventListeners();
+            render();
+        };
+
+        function setupEventListeners() {
+            document.getElementById('prevMonthBtn').addEventListener('click', () => changeMonth(-1));
+            document.getElementById('nextMonthBtn').addEventListener('click', () => changeMonth(1));
+            document.getElementById('searchInput').addEventListener('input', renderTable);
+            document.getElementById('typeFilter').addEventListener('change', renderTable);
+            document.getElementById('transactionForm').addEventListener('submit', handleFormSubmit);
+            document.getElementById('budgetForm').addEventListener('submit', handleBudgetSubmit);
+        }
+
+        function changeMonth(delta) {
+            let m = state.currentMonth + delta;
+            let y = state.currentYear;
+            if (m < 1) { m = 12; y--; }
+            else if (m > 12) { m = 1; y++; }
+            state.currentMonth = m;
+            state.currentYear = y;
+            render();
+        }
+
+        function render() {
+            // Update Month Label
+            document.getElementById('currentMonthLabel').innerText = `${state.currentYear}年 ${state.currentMonth}月`;
+
+            // Filter transactions for current month
+            const monthStr = `${state.currentYear}-${String(state.currentMonth).padStart(2, '0')}`;
+            const monthlyItems = state.transactions.filter(t => t.date.startsWith(monthStr));
+
+            // Calculate Totals
+            const totalInc = monthlyItems.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
+            const totalExp = monthlyItems.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
+            const balance = totalInc - totalExp;
+            const totalBudget = Object.values(state.budgets).reduce((sum, v) => sum + Number(v), 0);
+            const usagePercent = totalBudget > 0 ? Math.min(Math.round((totalExp / totalBudget) * 100), 100) : 0;
+            const savingsRate = totalInc > 0 ? Math.max(0, Math.round((balance / totalInc) * 100)) : 0;
+
+            // Render Overview Cards
+            document.getElementById('totalIncome').innerText = `¥${totalInc.toLocaleString()}`;
+            document.getElementById('totalExpense').innerText = `¥${totalExp.toLocaleString()}`;
+            document.getElementById('totalBalance').innerText = `¥${balance.toLocaleString()}`;
+            document.getElementById('budgetUsagePercent').innerText = `${usagePercent}%`;
+            document.getElementById('budgetProgressBar').style.width = `${usagePercent}%`;
+            document.getElementById('savingsRate').innerText = `${savingsRate}%`;
+
+            // Adjust balance card color if negative
+            const balElem = document.getElementById('totalBalance');
+            if (balance < 0) {
+                balElem.classList.remove('text-white');
+                balElem.classList.add('text-rose-400');
+            } else {
+                balElem.classList.remove('text-rose-400');
+                balElem.classList.add('text-white');
+            }
+
+            renderChart(monthlyItems);
+            renderBudgetProgress(monthlyItems);
+            renderTable();
+        }
+
+        // Render Donut Chart
+        function renderChart(monthlyItems) {
+            const expenseItems = monthlyItems.filter(t => t.type === 'expense');
+            const categoryTotals = {};
+            
+            expenseItems.forEach(t => {
+                categoryTotals[t.category] = (categoryTotals[t.category] || 0) + Number(t.amount);
+            });
+
+            const labels = Object.keys(categoryTotals);
+            const data = Object.values(categoryTotals);
+
+            const canvas = document.getElementById('categoryChart');
+            const noDataElem = document.getElementById('noChartData');
+
+            if (labels.length === 0) {
+                canvas.classList.add('hidden');
+                noDataElem.classList.remove('hidden');
+                if (categoryChartInstance) {
+                    categoryChartInstance.destroy();
+                    categoryChartInstance = null;
+                }
+                return;
+            }
+
+            canvas.classList.remove('hidden');
+            noDataElem.classList.add('hidden');
+
+            const backgroundColors = labels.map(cat => {
+                const found = EXPENSE_CATEGORIES.find(c => c.id === cat);
+                return found ? found.color : '#94a3b8';
+            });
+
+            if (categoryChartInstance) {
+                categoryChartInstance.destroy();
+            }
+
+            categoryChartInstance = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: { family: "'Noto Sans JP', sans-serif", size: 11 },
+                                boxWidth: 12,
+                                padding: 10
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.label}: ¥${context.raw.toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '68%'
+                }
+            });
+        }
+
+        // Render Category Budget List
+        function renderBudgetProgress(monthlyItems) {
+            const container = document.getElementById('categoryBudgetList');
+            container.innerHTML = '';
+
+            const expenseItems = monthlyItems.filter(t => t.type === 'expense');
+            const categorySpent = {};
+            expenseItems.forEach(t => {
+                categorySpent[t.category] = (categorySpent[t.category] || 0) + Number(t.amount);
+            });
+
+            EXPENSE_CATEGORIES.forEach(cat => {
+                const spent = categorySpent[cat.id] || 0;
+                const budget = state.budgets[cat.id] || 0;
+                const pct = budget > 0 ? Math.min(Math.round((spent / budget) * 100), 100) : 0;
+                const isOver = spent > budget && budget > 0;
+
+                const itemHtml = `
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col space-y-1.5">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-semibold text-slate-700 flex items-center">
+                                <i class="fa-solid ${cat.icon} mr-1.5" style="color:${cat.color}"></i>
+                                ${cat.id}
+                            </span>
+                            <span class="text-slate-500">
+                                <span class="font-bold ${isOver ? 'text-rose-600' : 'text-slate-800'}">¥${spent.toLocaleString()}</span> / ¥${budget.toLocaleString()}
+                            </span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                            <div class="h-1.5 rounded-full transition-all duration-300" 
+                                 style="width: ${pct}%; background-color: ${isOver ? '#ef4444' : cat.color}"></div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', itemHtml);
+            });
+        }
+
+        // Render Transactions Table
+        function renderTable() {
+            const tbody = document.getElementById('transactionTableBody');
+            const emptyState = document.getElementById('emptyState');
+            const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+            const typeVal = document.getElementById('typeFilter').value;
+
+            const monthStr = `${state.currentYear}-${String(state.currentMonth).padStart(2, '0')}`;
+
+            let filtered = state.transactions.filter(t => t.date.startsWith(monthStr));
+
+            if (typeVal !== 'all') {
+                filtered = filtered.filter(t => t.type === typeVal);
+            }
+
+            if (searchVal) {
+                filtered = filtered.filter(t => 
+                    (t.memo && t.memo.toLowerCase().includes(searchVal)) ||
+                    (t.category && t.category.toLowerCase().includes(searchVal)) ||
+                    t.amount.toString().includes(searchVal)
+                );
+            }
+
+            // Sort by date descending
+            filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            document.getElementById('transactionCountBadge').innerText = `${filtered.length}件`;
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            filtered.forEach(t => {
+                const isExpense = t.type === 'expense';
+                const catObj = (isExpense ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).find(c => c.id === t.category) || { icon: 'fa-tag', color: '#64748b' };
+
+                const rowHtml = `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3 px-4 font-mono text-xs text-slate-500">${t.date}</td>
+                        <td class="py-3 px-4">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${isExpense ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}">
+                                ${isExpense ? '支出' : '収入'}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4">
+                            <span class="inline-flex items-center font-medium text-slate-700">
+                                <i class="fa-solid ${catObj.icon} mr-1.5 text-xs" style="color: ${catObj.color}"></i>
+                                ${t.category}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-xs text-slate-600">
+                            <div>${t.memo || '-'}</div>
+                            <div class="text-[10px] text-slate-400">${t.payment || ''}</div>
+                        </td>
+                        <td class="py-3 px-4 text-right font-bold ${isExpense ? 'text-slate-800' : 'text-emerald-600'}">
+                            ${isExpense ? '-' : '+'}¥${Number(t.amount).toLocaleString()}
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <div class="flex items-center justify-center space-x-2">
+                                <button onclick="editTransaction('${t.id}')" class="text-slate-400 hover:text-emerald-600 p-1 transition">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button onclick="deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 p-1 transition">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', rowHtml);
+            });
+        }
+
+        // Form Type Switcher
+        function setFormType(type) {
+            document.getElementById('formType').value = type;
+            const expBtn = document.getElementById('typeExpenseBtn');
+            const incBtn = document.getElementById('typeIncomeBtn');
+            const catSelect = document.getElementById('formCategory');
+
+            if (type === 'expense') {
+                expBtn.className = 'py-2 rounded-lg bg-white text-rose-600 shadow-sm text-center';
+                incBtn.className = 'py-2 rounded-lg text-slate-600 text-center hover:text-slate-900';
+                catSelect.innerHTML = EXPENSE_CATEGORIES.map(c => `<option value="${c.id}">${c.id}</option>`).join('');
+            } else {
+                incBtn.className = 'py-2 rounded-lg bg-white text-emerald-600 shadow-sm text-center';
+                expBtn.className = 'py-2 rounded-lg text-slate-600 text-center hover:text-slate-900';
+                catSelect.innerHTML = INCOME_CATEGORIES.map(c => `<option value="${c.id}">${c.id}</option>`).join('');
+            }
+        }
+
+        // Open Add Modal
+        function openAddModal() {
+            document.getElementById('editIndex').value = '-1';
+            document.getElementById('modalTitle').innerText = '収支明細の追加';
+            document.getElementById('transactionForm').reset();
+
+            // Set default date to today or current month view
+            const today = new Date();
+            const yyyy = state.currentYear;
+            const mm = String(state.currentMonth).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('formDate').value = `${yyyy}-${mm}-${dd}`;
+
+            setFormType('expense');
+            openModal('transactionModal');
+        }
+
+        // Edit Transaction
+        function editTransaction(id) {
+            const t = state.transactions.find(item => item.id === id);
+            if (!t) return;
+
+            document.getElementById('editIndex').value = id;
+            document.getElementById('modalTitle').innerText = '収支明細の編集';
+            setFormType(t.type);
+
+            document.getElementById('formAmount').value = t.amount;
+            document.getElementById('formDate').value = t.date;
+            document.getElementById('formCategory').value = t.category;
+            document.getElementById('formPayment').value = t.payment || '現金';
+            document.getElementById('formMemo').value = t.memo || '';
+
+            openModal('transactionModal');
+        }
+
+        // Delete Transaction
+        function deleteTransaction(id) {
+            state.transactions = state.transactions.filter(t => t.id !== id);
+            saveTransactions();
+            render();
+        }
+
+        // Submit Add/Edit Form
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const editId = document.getElementById('editIndex').value;
+            const type = document.getElementById('formType').value;
+            const amount = Number(document.getElementById('formAmount').value);
+            const date = document.getElementById('formDate').value;
+            const category = document.getElementById('formCategory').value;
+            const payment = document.getElementById('formPayment').value;
+            const memo = document.getElementById('formMemo').value;
+
+            if (editId === '-1') {
+                const newTrans = {
+                    id: Date.now().toString(),
+                    type,
+                    amount,
+                    date,
+                    category,
+                    payment,
+                    memo
+                };
+                state.transactions.push(newTrans);
+            } else {
+                const idx = state.transactions.findIndex(t => t.id === editId);
+                if (idx !== -1) {
+                    state.transactions[idx] = { id: editId, type, amount, date, category, payment, memo };
+                }
+            }
+
+            saveTransactions();
+            closeModal('transactionModal');
+            render();
+        }
+
+        // Open Budget Modal
+        function openModal(id) {
+            if (id === 'budgetConfigModal') {
+                const container = document.getElementById('budgetInputsContainer');
+                container.innerHTML = '';
+                EXPENSE_CATEGORIES.forEach(cat => {
+                    const currentVal = state.budgets[cat.id] || 0;
+                    const html = `
+                        <div class="flex items-center justify-between text-xs">
+                            <label class="font-medium text-slate-700 flex items-center w-1/3">
+                                <i class="fa-solid ${cat.icon} mr-1.5" style="color:${cat.color}"></i>
+                                ${cat.id}
+                            </label>
+                            <div class="relative w-2/3">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">¥</span>
+                                <input type="number" name="budget_${cat.id}" value="${currentVal}" min="0" step="1000" class="w-full pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold text-right">
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', html);
+                });
+            }
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        // Submit Budget Form
+        function handleBudgetSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            EXPENSE_CATEGORIES.forEach(cat => {
+                const val = Number(formData.get(`budget_${cat.id}`) || 0);
+                state.budgets[cat.id] = val;
+            });
+            saveBudgets();
+            closeModal('budgetConfigModal');
+            render();
+        }
+
+        function copyFirebaseConfig() {
+            const code = document.getElementById('firebaseCodeSnippet').innerText;
+            navigator.clipboard.writeText(code).then(() => {
+                alert('Firebase設定をコピーしました！');
+            }).catch(() => {
+                document.execCommand('copy');
+            });
+        }
+    </script>
+</body>
+</html>
