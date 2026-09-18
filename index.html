@@ -56,6 +56,12 @@
                     </div>
                 </div>
 
+                <!-- Cloud Sync Status Badge -->
+                <div id="cloudSyncBadge" class="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <i class="fa-solid fa-cloud text-xs animate-pulse"></i>
+                    <span id="cloudStatusText">Firebase同期中</span>
+                </div>
+
                 <!-- Month Selector & Actions -->
                 <div class="flex items-center space-x-2 sm:space-x-4">
                     <!-- Month Selector -->
@@ -341,20 +347,20 @@
                 <div class="space-y-2">
                     <div class="flex items-center space-x-2">
                         <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs">2</span>
-                        <h4 class="font-bold text-sm text-slate-800">ご提示の Firebase 設定 (Project ID: task-750c4)</h4>
+                        <h4 class="font-bold text-sm text-slate-800">ご提示の Firebase 設定 (Project ID: kakeibou-8ee1f)</h4>
                     </div>
-                    <p>このアプリはローカルストレージ（ブラウザ内保存）で即座に動作しますが、Firebase Cloud Firestoreと連携してマルチデバイス同期することも可能です。</p>
+                    <p>このアプリは Firebase Cloud Firestore とリアルタイム同期して、複数端末からでもデータを安全に管理できます。</p>
                     <div class="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] overflow-x-auto relative">
-                        <button onclick="copyFirebaseConfig()" class="absolute right-2 top-2 px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[10px] transition">
+                        <button id="copyConfigBtn" onclick="copyFirebaseConfig()" class="absolute right-2 top-2 px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[10px] transition">
                             コピー
                         </button>
                         <pre id="firebaseCodeSnippet">const firebaseConfig = {
-  apiKey: "AIzaSyDLmZ2HaepCjwsrjyRT2XnX0L_LD3OR-X0",
-  authDomain: "task-750c4.firebaseapp.com",
-  projectId: "task-750c4",
-  storageBucket: "task-750c4.firebasestorage.app",
-  messagingSenderId: "78443563761",
-  appId: "1:78443563761:web:5e10fc028e4ebf785af750"
+  apiKey: "AIzaSyCimfHKd-E1LpyfQkLJOqS-uXkxlH-mOlM",
+  authDomain: "kakeibou-8ee1f.firebaseapp.com",
+  projectId: "kakeibou-8ee1f",
+  storageBucket: "kakeibou-8ee1f.firebasestorage.app",
+  messagingSenderId: "76698083125",
+  appId: "1:76698083125:web:bd77a3e397325778f7767c"
 };</pre>
                     </div>
                 </div>
@@ -393,7 +399,26 @@
     </div>
 
     <!-- Application Logic Script -->
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration provided by user
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyCimfHKd-E1LpyfQkLJOqS-uXkxlH-mOlM",
+            authDomain: "kakeibou-8ee1f.firebaseapp.com",
+            projectId: "kakeibou-8ee1f",
+            storageBucket: "kakeibou-8ee1f.firebasestorage.app",
+            messagingSenderId: "76698083125",
+            appId: "1:76698083125:web:bd77a3e397325778f7767c"
+        };
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'kakeibo-app';
+
+        let app, db, auth;
+        let isFirebaseConnected = false;
+
         // Default Master Categories
         const EXPENSE_CATEGORIES = [
             { id: '食費', icon: 'fa-utensils', color: '#10b981', defaultBudget: 40000 },
@@ -425,8 +450,89 @@
 
         let categoryChartInstance = null;
 
+        // Initialize App & Firebase
+        window.addEventListener('load', async () => {
+            loadLocalState();
+            setupEventListeners();
+            render();
+            await initFirebase();
+        });
+
+        // Initialize Firebase Authentication & Realtime Firestore Listeners
+        async function initFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Authenticate first
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    try {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } catch(e) {
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                updateCloudBadge(true, "クラウド同期中");
+                isFirebaseConnected = true;
+
+                // Listen to transactions in real-time
+                const transColRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+                onSnapshot(transColRef, (snapshot) => {
+                    const fetchedTrans = [];
+                    snapshot.forEach((docSnap) => {
+                        fetchedTrans.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+                    if (fetchedTrans.length > 0) {
+                        state.transactions = fetchedTrans;
+                        localStorage.setItem('smart_kakeibo_transactions', JSON.stringify(state.transactions));
+                        render();
+                    } else if (state.transactions.length > 0) {
+                        // Seed existing local transactions to cloud if cloud is empty
+                        state.transactions.forEach(t => saveTransactionToCloud(t));
+                    }
+                }, (error) => {
+                    console.warn("Firestore transactions sync warning:", error);
+                });
+
+                // Listen to budgets in real-time
+                const budgetsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'budgets');
+                onSnapshot(budgetsColRef, (snapshot) => {
+                    snapshot.forEach((docSnap) => {
+                        if (docSnap.id === 'category_budgets') {
+                            state.budgets = docSnap.data();
+                            localStorage.setItem('smart_kakeibo_budgets', JSON.stringify(state.budgets));
+                            render();
+                        }
+                    });
+                }, (error) => {
+                    console.warn("Firestore budgets sync warning:", error);
+                });
+
+            } catch (err) {
+                console.warn("Firebase initialization skipped or failed, using local mode:", err);
+                updateCloudBadge(false, "ローカル保存モード");
+            }
+        }
+
+        function updateCloudBadge(isConnected, text) {
+            const badge = document.getElementById('cloudSyncBadge');
+            const statusText = document.getElementById('cloudStatusText');
+            if (badge && statusText) {
+                statusText.innerText = text;
+                if (isConnected) {
+                    badge.className = "hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200";
+                } else {
+                    badge.className = "hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200";
+                }
+            }
+        }
+
         // Load data from LocalStorage
-        function loadState() {
+        function loadLocalState() {
             const savedTrans = localStorage.getItem('smart_kakeibo_transactions');
             if (savedTrans) {
                 try { state.transactions = JSON.parse(savedTrans); } catch(e) { state.transactions = []; }
@@ -442,7 +548,7 @@
                     { id: '4', type: 'expense', amount: 1200, category: '趣味・娯楽', date: `${yyyy}-${mm}-03`, payment: '電子マネー/Pay', memo: 'カフェ代' },
                     { id: '5', type: 'expense', amount: 3500, category: '日用品', date: `${yyyy}-${mm}-04`, payment: 'クレジットカード', memo: '洗剤・日用品' }
                 ];
-                saveTransactions();
+                saveLocalTransactions();
             }
 
             const savedBudgets = localStorage.getItem('smart_kakeibo_budgets');
@@ -450,24 +556,47 @@
                 try { state.budgets = JSON.parse(savedBudgets); } catch(e) { state.budgets = {}; }
             } else {
                 EXPENSE_CATEGORIES.forEach(c => state.budgets[c.id] = c.defaultBudget);
-                saveBudgets();
+                saveLocalBudgets();
             }
         }
 
-        function saveTransactions() {
+        function saveLocalTransactions() {
             localStorage.setItem('smart_kakeibo_transactions', JSON.stringify(state.transactions));
         }
 
-        function saveBudgets() {
+        function saveLocalBudgets() {
             localStorage.setItem('smart_kakeibo_budgets', JSON.stringify(state.budgets));
         }
 
-        // Initialize App
-        window.onload = function() {
-            loadState();
-            setupEventListeners();
-            render();
-        };
+        async function saveTransactionToCloud(transaction) {
+            if (!isFirebaseConnected || !db) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'transactions', transaction.id);
+                await setDoc(docRef, transaction);
+            } catch(e) {
+                console.error("Cloud save failed:", e);
+            }
+        }
+
+        async function deleteTransactionFromCloud(id) {
+            if (!isFirebaseConnected || !db) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'transactions', id);
+                await deleteDoc(docRef);
+            } catch(e) {
+                console.error("Cloud delete failed:", e);
+            }
+        }
+
+        async function saveBudgetsToCloud() {
+            if (!isFirebaseConnected || !db) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'budgets', 'category_budgets');
+                await setDoc(docRef, state.budgets);
+            } catch(e) {
+                console.error("Cloud budget save failed:", e);
+            }
+        }
 
         function setupEventListeners() {
             document.getElementById('prevMonthBtn').addEventListener('click', () => changeMonth(-1));
@@ -701,10 +830,10 @@
                         </td>
                         <td class="py-3 px-4 text-center">
                             <div class="flex items-center justify-center space-x-2">
-                                <button onclick="editTransaction('${t.id}')" class="text-slate-400 hover:text-emerald-600 p-1 transition">
+                                <button data-action="edit" data-id="${t.id}" class="text-slate-400 hover:text-emerald-600 p-1 transition">
                                     <i class="fa-solid fa-pen-to-square"></i>
                                 </button>
-                                <button onclick="deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 p-1 transition">
+                                <button data-action="delete" data-id="${t.id}" class="text-slate-400 hover:text-rose-600 p-1 transition">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
                             </div>
@@ -713,10 +842,21 @@
                 `;
                 tbody.insertAdjacentHTML('beforeend', rowHtml);
             });
+
+            // Delegate table action buttons
+            tbody.querySelectorAll('button[data-action]').forEach(btn => {
+                btn.onclick = (e) => {
+                    const target = e.currentTarget;
+                    const action = target.getAttribute('data-action');
+                    const id = target.getAttribute('data-id');
+                    if (action === 'edit') editTransaction(id);
+                    if (action === 'delete') deleteTransaction(id);
+                };
+            });
         }
 
         // Form Type Switcher
-        function setFormType(type) {
+        window.setFormType = function(type) {
             document.getElementById('formType').value = type;
             const expBtn = document.getElementById('typeExpenseBtn');
             const incBtn = document.getElementById('typeIncomeBtn');
@@ -731,10 +871,10 @@
                 expBtn.className = 'py-2 rounded-lg text-slate-600 text-center hover:text-slate-900';
                 catSelect.innerHTML = INCOME_CATEGORIES.map(c => `<option value="${c.id}">${c.id}</option>`).join('');
             }
-        }
+        };
 
         // Open Add Modal
-        function openAddModal() {
+        window.openAddModal = function() {
             document.getElementById('editIndex').value = '-1';
             document.getElementById('modalTitle').innerText = '収支明細の追加';
             document.getElementById('transactionForm').reset();
@@ -748,7 +888,7 @@
 
             setFormType('expense');
             openModal('transactionModal');
-        }
+        };
 
         // Edit Transaction
         function editTransaction(id) {
@@ -771,7 +911,8 @@
         // Delete Transaction
         function deleteTransaction(id) {
             state.transactions = state.transactions.filter(t => t.id !== id);
-            saveTransactions();
+            saveLocalTransactions();
+            deleteTransactionFromCloud(id);
             render();
         }
 
@@ -786,8 +927,9 @@
             const payment = document.getElementById('formPayment').value;
             const memo = document.getElementById('formMemo').value;
 
+            let targetTrans = null;
             if (editId === '-1') {
-                const newTrans = {
+                targetTrans = {
                     id: Date.now().toString(),
                     type,
                     amount,
@@ -796,21 +938,24 @@
                     payment,
                     memo
                 };
-                state.transactions.push(newTrans);
+                state.transactions.push(targetTrans);
             } else {
                 const idx = state.transactions.findIndex(t => t.id === editId);
                 if (idx !== -1) {
-                    state.transactions[idx] = { id: editId, type, amount, date, category, payment, memo };
+                    targetTrans = { id: editId, type, amount, date, category, payment, memo };
+                    state.transactions[idx] = targetTrans;
                 }
             }
 
-            saveTransactions();
+            saveLocalTransactions();
+            if (targetTrans) saveTransactionToCloud(targetTrans);
+
             closeModal('transactionModal');
             render();
         }
 
-        // Open Budget Modal
-        function openModal(id) {
+        // Modal Helpers
+        window.openModal = function(id) {
             if (id === 'budgetConfigModal') {
                 const container = document.getElementById('budgetInputsContainer');
                 container.innerHTML = '';
@@ -832,11 +977,11 @@
                 });
             }
             document.getElementById(id).classList.remove('hidden');
-        }
+        };
 
-        function closeModal(id) {
+        window.closeModal = function(id) {
             document.getElementById(id).classList.add('hidden');
-        }
+        };
 
         // Submit Budget Form
         function handleBudgetSubmit(e) {
@@ -846,19 +991,38 @@
                 const val = Number(formData.get(`budget_${cat.id}`) || 0);
                 state.budgets[cat.id] = val;
             });
-            saveBudgets();
+            saveLocalBudgets();
+            saveBudgetsToCloud();
             closeModal('budgetConfigModal');
             render();
         }
 
-        function copyFirebaseConfig() {
+        window.copyFirebaseConfig = function() {
             const code = document.getElementById('firebaseCodeSnippet').innerText;
-            navigator.clipboard.writeText(code).then(() => {
-                alert('Firebase設定をコピーしました！');
-            }).catch(() => {
+            const copyBtn = document.getElementById('copyConfigBtn');
+
+            const handleSuccess = () => {
+                if (copyBtn) {
+                    const originalText = copyBtn.innerText;
+                    copyBtn.innerText = 'コピー完了！';
+                    copyBtn.classList.replace('bg-slate-700', 'bg-emerald-600');
+                    setTimeout(() => {
+                        copyBtn.innerText = originalText;
+                        copyBtn.classList.replace('bg-emerald-600', 'bg-slate-700');
+                    }, 2000);
+                }
+            };
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(code).then(handleSuccess).catch(() => {
+                    document.execCommand('copy');
+                    handleSuccess();
+                });
+            } else {
                 document.execCommand('copy');
-            });
-        }
+                handleSuccess();
+            }
+        };
     </script>
 </body>
 </html>
